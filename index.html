@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TPU Systolic Array Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 22px;
+    color: #58a6ff;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #8b949e;
+    margin-bottom: 16px;
+  }
+
+  /* Layout */
+  .main-container {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 1400px;
+    width: 100%;
+  }
+  .left-panel {
+    flex: 1;
+    min-width: 600px;
+    max-width: 800px;
+  }
+  .right-panel {
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Controls */
+  .controls {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .controls label {
+    font-size: 12px;
+    color: #8b949e;
+  }
+  .controls input[type="number"] {
+    width: 48px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 13px;
+    text-align: center;
+  }
+  .controls select {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #30363d; }
+  .btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .btn.primary:hover { background: #2ea043; }
+  .sep { width: 1px; height: 24px; background: #30363d; }
+  .speed-slider {
+    width: 80px;
+    accent-color: #58a6ff;
+  }
+
+  /* Canvas area */
+  .canvas-wrapper {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    border-radius: 4px;
+  }
+  .time-display {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #58a6ff;
+    background: rgba(13,17,23,0.85);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+  }
+  .phase-display {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: rgba(13,17,23,0.85);
+  }
+  .phase-fill { color: #f0883e; }
+  .phase-steady { color: #3fb950; }
+  .phase-drain { color: #f85149; }
+
+  /* Right panel cards */
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .card h3 {
+    font-size: 13px;
+    color: #58a6ff;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Utilization bar */
+  .util-bar-container {
+    background: #0d1117;
+    border-radius: 4px;
+    height: 28px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .util-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #238636, #3fb950);
+    transition: width 0.2s;
+    border-radius: 4px;
+  }
+  .util-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+
+  /* Stats */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #21262d;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: #8b949e; }
+  .stat-value { color: #c9d1d9; font-weight: bold; }
+
+  /* Utilization chart */
+  .chart-canvas {
+    width: 100%;
+    height: 120px;
+    background: #0d1117;
+    border-radius: 4px;
+  }
+
+  /* Hover tooltip */
+  .tooltip {
+    display: none;
+    position: fixed;
+    background: #1c2128;
+    border: 1px solid #444c56;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    z-index: 100;
+    pointer-events: none;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .tooltip .tt-title {
+    color: #58a6ff;
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+
+  /* Formula bar */
+  .formula {
+    font-size: 13px;
+    color: #8b949e;
+    text-align: center;
+    margin-top: 8px;
+    padding: 6px;
+    background: #161b22;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+  }
+  .formula code {
+    color: #f0883e;
+    font-weight: bold;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    margin-top: 6px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* Output row */
+  .output-row {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #8b949e;
+    min-height: 20px;
+  }
+  .output-row span {
+    color: #f0883e;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h1>TPU MXU Systolic Array Visualizer</h1>
+<p class="subtitle">Weight-stationary mode: C[i,j] = &Sigma;<sub>k</sub> A[i,k] &times; B[k,j]</p>
+
+<div class="main-container">
+  <div class="left-panel">
+    <!-- Controls -->
+    <div class="controls">
+      <label>Preset:</label>
+      <select id="preset" onchange="applyPreset()">
+        <option value="4">4 &times; 4 &times; 4</option>
+        <option value="6">6 &times; 4 &times; 6</option>
+        <option value="8">8 &times; 8 &times; 8</option>
+        <option value="custom">Custom</option>
+      </select>
+      <label>M:</label><input type="number" id="inputM" value="4" min="1" max="16">
+      <label>K:</label><input type="number" id="inputK" value="4" min="1" max="16">
+      <label>N:</label><input type="number" id="inputN" value="4" min="1" max="16">
+      <button class="btn" onclick="resetSim()">Reset</button>
+      <div class="sep"></div>
+      <button class="btn" id="btnPrev" onclick="stepBack()">&laquo;</button>
+      <button class="btn primary" id="btnPlay" onclick="togglePlay()">&#9654; Play</button>
+      <button class="btn" id="btnNext" onclick="stepForward()">&raquo;</button>
+      <div class="sep"></div>
+      <label>Speed:</label>
+      <input type="range" class="speed-slider" id="speedSlider" min="1" max="10" value="4">
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-wrapper">
+      <canvas id="mainCanvas"></canvas>
+      <div class="time-display" id="timeDisplay">T = 0</div>
+      <div class="phase-display" id="phaseDisplay"></div>
+    </div>
+
+    <div class="formula">
+      A[i,k] arrives at PE(k,j) at time <code>T = i + k + j</code> &nbsp;|&nbsp;
+      Total cycles = <code>M + K + N - 2</code>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#2d333b"></div> Idle</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#238636"></div> Active (computing)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f0883e"></div> Result output (C[i,j])</div>
+    </div>
+
+    <div class="output-row" id="outputRow"></div>
+  </div>
+
+  <div class="right-panel">
+    <!-- Utilization -->
+    <div class="card">
+      <h3>PE Utilization</h3>
+      <div class="util-bar-container">
+        <div class="util-bar" id="utilBar" style="width:0%"></div>
+        <div class="util-bar-text" id="utilText">0%</div>
+      </div>
+      <canvas class="chart-canvas" id="chartCanvas"></canvas>
+    </div>
+
+    <!-- Stats -->
+    <div class="card">
+      <h3>Statistics</h3>
+      <div class="stat-row"><span class="stat-label">Clock cycle</span><span class="stat-value" id="statT">0</span></div>
+      <div class="stat-row"><span class="stat-label">Total cycles</span><span class="stat-value" id="statTotal">0</span></div>
+      <div class="stat-row"><span class="stat-label">Active PEs</span><span class="stat-value" id="statActive">0</span></div>
+      <div class="stat-row"><span class="stat-label">Total PEs</span><span class="stat-value" id="statTotalPE">0</span></div>
+      <div class="stat-row"><span class="stat-label">Results completed</span><span class="stat-value" id="statCompleted">0 / 0</span></div>
+      <div class="stat-row"><span class="stat-label">Phase</span><span class="stat-value" id="statPhase">—</span></div>
+      <div class="stat-row"><span class="stat-label">Fill overhead</span><span class="stat-value" id="statFill">0 cycles</span></div>
+      <div class="stat-row"><span class="stat-label">Drain overhead</span><span class="stat-value" id="statDrain">0 cycles</span></div>
+      <div class="stat-row"><span class="stat-label">Avg utilization</span><span class="stat-value" id="statAvgUtil">0%</span></div>
+    </div>
+
+    <!-- PE Detail -->
+    <div class="card">
+      <h3>PE Detail (hover on grid)</h3>
+      <div id="peDetail" style="font-size:12px;line-height:1.8;color:#8b949e;">
+        Hover over a PE cell to see details.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ─── Simulation State ───
+let M = 4, K = 4, N = 4;
+let T = 0;
+let totalCycles = 0;
+let playing = false;
+let animTimer = null;
+let utilizationHistory = [];
+let completedResults = [];
+
+// ─── Canvas refs ───
+const mainCanvas = document.getElementById('mainCanvas');
+const ctx = mainCanvas.getContext('2d');
+const chartCanvas = document.getElementById('chartCanvas');
+const chartCtx = chartCanvas.getContext('2d');
+
+// ─── Simulation logic ───
+function getPEState(k, j, t) {
+  const i = t - k - j;
+  if (i < 0 || i >= M) return { active: false };
+  const isOutput = (k === K - 1);
+  // Build psum description
+  let psumTerms = [];
+  for (let kk = 0; kk <= k; kk++) {
+    psumTerms.push(`A[${i},${kk}]*B[${kk},${j}]`);
+  }
+  return {
+    active: true,
+    i, k, j,
+    aElem: `A[${i},${k}]`,
+    bElem: `B[${k},${j}]`,
+    multiply: `A[${i},${k}]*B[${k},${j}]`,
+    isOutput,
+    cElem: isOutput ? `C[${i},${j}]` : null,
+    termsAccumulated: k + 1,
+    totalTerms: K,
+    psumDesc: psumTerms.join(' + '),
+  };
+}
+
+function countActive(t) {
+  let count = 0;
+  for (let k = 0; k < K; k++)
+    for (let j = 0; j < N; j++)
+      if (getPEState(k, j, t).active) count++;
+  return count;
+}
+
+function getCompletedAt(t) {
+  let results = [];
+  for (let j = 0; j < N; j++) {
+    const state = getPEState(K - 1, j, t);
+    if (state.active && state.isOutput) {
+      results.push(`C[${state.i},${j}]`);
+    }
+  }
+  return results;
+}
+
+function getPhase(t) {
+  // Fill: T < K + N - 2 (not all PEs can be active yet)
+  // Drain: T >= M - 1 + 0 + 0 = M-1 (first row of A has finished entering for j=0)
+  // Actually: full utilization when all K*N PEs could be active
+  // PE(k,j) active when 0 <= t-k-j < M, i.e., k+j <= t < M+k+j
+  // All PEs active when t >= (K-1)+(N-1) and t < M
+  const fillEnd = K + N - 2;  // first time all PEs could be active
+  const drainStart = M;       // first time a PE in (0,0) becomes idle
+
+  if (M >= K + N - 1) {
+    // Can reach full utilization
+    if (t < fillEnd) return 'fill';
+    if (t < drainStart) return 'steady';
+    return 'drain';
+  } else {
+    // Never reaches full utilization
+    if (t < Math.min(fillEnd, drainStart)) return 'fill';
+    if (t >= fillEnd && t < drainStart) return 'steady';
+    if (t < fillEnd && t >= drainStart) return 'fill+drain';
+    return 'drain';
+  }
+}
+
+// ─── Drawing ───
+const DPR = window.devicePixelRatio || 1;
+
+function resizeCanvas() {
+  const wrapper = mainCanvas.parentElement;
+  const w = wrapper.clientWidth - 32;
+  // Calculate cell size to fit
+  const labelMarginLeft = 60;
+  const labelMarginTop = 40;
+  const labelMarginBottom = 30;
+  const maxCellW = Math.floor((w - labelMarginLeft) / N);
+  const maxCellH = Math.floor(500 / K);
+  const cellSize = Math.min(maxCellW, maxCellH, 80);
+  const canvasW = labelMarginLeft + N * cellSize + 20;
+  const canvasH = labelMarginTop + K * cellSize + labelMarginBottom + 10;
+
+  mainCanvas.width = canvasW * DPR;
+  mainCanvas.height = canvasH * DPR;
+  mainCanvas.style.width = canvasW + 'px';
+  mainCanvas.style.height = canvasH + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  // Chart canvas
+  const cw = chartCanvas.parentElement.clientWidth - 28;
+  chartCanvas.width = cw * DPR;
+  chartCanvas.height = 120 * DPR;
+  chartCanvas.style.width = cw + 'px';
+  chartCanvas.style.height = '120px';
+  chartCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  return { cellSize, labelMarginLeft, labelMarginTop, canvasW, canvasH };
+}
+
+let layoutCache = {};
+function getLayout() {
+  return layoutCache;
+}
+
+function draw() {
+  const layout = resizeCanvas();
+  layoutCache = layout;
+  const { cellSize, labelMarginLeft: mx, labelMarginTop: my, canvasW, canvasH } = layout;
+  const gap = 2;
+
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Column labels (j)
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'center';
+  for (let j = 0; j < N; j++) {
+    ctx.fillText(`j=${j}`, mx + j * cellSize + cellSize / 2, my - 8);
+  }
+
+  // Row labels (k)
+  ctx.textAlign = 'right';
+  for (let k = 0; k < K; k++) {
+    ctx.fillText(`k=${k}`, mx - 8, my + k * cellSize + cellSize / 2 + 4);
+  }
+
+  // A input arrows (left side)
+  ctx.textAlign = 'right';
+  ctx.font = '10px monospace';
+  for (let k = 0; k < K; k++) {
+    const i = T - k;  // element entering row k at column 0
+    if (i >= 0 && i < M) {
+      ctx.fillStyle = '#3fb950';
+      const y = my + k * cellSize + cellSize / 2;
+      ctx.fillText(`A[${i},${k}]→`, mx - 12, y + 4);
+      // Draw arrow
+      ctx.strokeStyle = '#3fb95080';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mx - 10, y);
+      ctx.lineTo(mx - 2, y);
+      ctx.stroke();
+    }
+  }
+
+  // Draw PE grid
+  for (let k = 0; k < K; k++) {
+    for (let j = 0; j < N; j++) {
+      const x = mx + j * cellSize + gap;
+      const y = my + k * cellSize + gap;
+      const w = cellSize - gap * 2;
+      const h = cellSize - gap * 2;
+
+      const state = getPEState(k, j, T);
+
+      // Background color
+      if (state.active && state.isOutput) {
+        ctx.fillStyle = '#f0883e';  // output
+      } else if (state.active) {
+        ctx.fillStyle = '#238636';  // active
+      } else {
+        ctx.fillStyle = '#2d333b';  // idle
+      }
+
+      // Rounded rect
+      const r = 4;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = state.active ? '#3fb95060' : '#30363d';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Text inside PE
+      if (state.active && cellSize >= 40) {
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = `${Math.min(10, cellSize / 6)}px monospace`;
+        // Show B[k,j] (stored weight)
+        ctx.fillText(`B[${k},${j}]`, x + w / 2, y + h / 2 - 8);
+        // Show current multiply
+        ctx.font = `${Math.min(9, cellSize / 7)}px monospace`;
+        ctx.fillStyle = '#ffffffcc';
+        ctx.fillText(`×A[${state.i},${k}]`, x + w / 2, y + h / 2 + 4);
+        // Show term count
+        ctx.font = `${Math.min(8, cellSize / 8)}px monospace`;
+        ctx.fillStyle = '#ffffff80';
+        ctx.fillText(`${state.termsAccumulated}/${K}`, x + w / 2, y + h / 2 + 16);
+      } else if (state.active && cellSize >= 24) {
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = '8px monospace';
+        ctx.fillText(`${state.termsAccumulated}/${K}`, x + w / 2, y + h / 2 + 3);
+      }
+
+      // Show B[k,j] label when idle and cell is big enough
+      if (!state.active && cellSize >= 40) {
+        ctx.fillStyle = '#8b949e60';
+        ctx.textAlign = 'center';
+        ctx.font = `${Math.min(10, cellSize / 6)}px monospace`;
+        ctx.fillText(`B[${k},${j}]`, x + w / 2, y + h / 2 + 4);
+      }
+    }
+  }
+
+  // Partial sum arrows (vertical, between rows)
+  ctx.strokeStyle = '#58a6ff40';
+  ctx.lineWidth = 1;
+  for (let k = 0; k < K - 1; k++) {
+    for (let j = 0; j < N; j++) {
+      const stateAbove = getPEState(k, j, T);
+      const stateBelow = getPEState(k + 1, j, T);
+      if (stateAbove.active && stateBelow.active && stateAbove.i === stateBelow.i) {
+        const x = mx + j * cellSize + cellSize / 2;
+        const y1 = my + k * cellSize + cellSize - gap;
+        const y2 = my + (k + 1) * cellSize + gap;
+        ctx.beginPath();
+        ctx.moveTo(x, y1);
+        ctx.lineTo(x, y2);
+        ctx.stroke();
+        // Arrow head
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y2 - 4);
+        ctx.lineTo(x, y2);
+        ctx.lineTo(x + 3, y2 - 4);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Output labels at bottom
+  ctx.textAlign = 'center';
+  ctx.font = '10px monospace';
+  for (let j = 0; j < N; j++) {
+    const state = getPEState(K - 1, j, T);
+    if (state.active && state.isOutput) {
+      ctx.fillStyle = '#f0883e';
+      const x = mx + j * cellSize + cellSize / 2;
+      const y = my + K * cellSize + 16;
+      ctx.fillText(`C[${state.i},${j}]`, x, y);
+    }
+  }
+
+  updateUI();
+  drawChart();
+}
+
+function updateUI() {
+  const active = countActive(T);
+  const totalPE = K * N;
+  const util = totalPE > 0 ? (active / totalPE * 100) : 0;
+  const phase = getPhase(T);
+  const completed = getCompletedAt(T);
+  const totalCompleted = completedResults.length;
+  const totalResults = M * N;
+
+  document.getElementById('timeDisplay').textContent = `T = ${T}`;
+  document.getElementById('statT').textContent = T;
+  document.getElementById('statTotal').textContent = totalCycles;
+  document.getElementById('statActive').textContent = `${active} / ${totalPE}`;
+  document.getElementById('statTotalPE').textContent = `${K} × ${N} = ${totalPE}`;
+  document.getElementById('statCompleted').textContent = `${totalCompleted} / ${totalResults}`;
+
+  const phaseMap = {
+    'fill': ['Fill (pipeline filling)', 'phase-fill'],
+    'steady': ['Steady (full utilization)', 'phase-steady'],
+    'drain': ['Drain (pipeline draining)', 'phase-drain'],
+    'fill+drain': ['Fill+Drain (overlap)', 'phase-fill'],
+  };
+  const [phaseText, phaseClass] = phaseMap[phase] || ['—', ''];
+  document.getElementById('statPhase').textContent = phaseText;
+  const phaseEl = document.getElementById('phaseDisplay');
+  phaseEl.textContent = phaseText;
+  phaseEl.className = 'phase-display ' + phaseClass;
+
+  const fillCycles = Math.min(K + N - 2, totalCycles);
+  const drainCycles = Math.min(K + N - 2, totalCycles);
+  document.getElementById('statFill').textContent = `${fillCycles} cycles (${(fillCycles/totalCycles*100).toFixed(0)}%)`;
+  document.getElementById('statDrain').textContent = `${drainCycles} cycles (${(drainCycles/totalCycles*100).toFixed(0)}%)`;
+
+  // Average utilization
+  if (utilizationHistory.length > 0) {
+    const avg = utilizationHistory.reduce((a, b) => a + b, 0) / utilizationHistory.length;
+    document.getElementById('statAvgUtil').textContent = `${avg.toFixed(1)}%`;
+  }
+
+  // Utilization bar
+  document.getElementById('utilBar').style.width = util + '%';
+  document.getElementById('utilText').textContent = `${util.toFixed(0)}% (${active}/${totalPE})`;
+
+  // Output row
+  if (completed.length > 0) {
+    document.getElementById('outputRow').innerHTML = `T=${T} output: <span>${completed.join(', ')}</span>`;
+  } else {
+    document.getElementById('outputRow').innerHTML = '';
+  }
+}
+
+function drawChart() {
+  const cw = chartCanvas.width / DPR;
+  const ch = chartCanvas.height / DPR;
+  chartCtx.clearRect(0, 0, cw, ch);
+
+  if (totalCycles === 0) return;
+
+  const padL = 30, padR = 10, padT = 10, padB = 20;
+  const plotW = cw - padL - padR;
+  const plotH = ch - padT - padB;
+
+  // Background grid
+  chartCtx.strokeStyle = '#21262d';
+  chartCtx.lineWidth = 0.5;
+  for (let p = 0; p <= 100; p += 25) {
+    const y = padT + plotH * (1 - p / 100);
+    chartCtx.beginPath();
+    chartCtx.moveTo(padL, y);
+    chartCtx.lineTo(padL + plotW, y);
+    chartCtx.stroke();
+    chartCtx.fillStyle = '#8b949e';
+    chartCtx.font = '9px monospace';
+    chartCtx.textAlign = 'right';
+    chartCtx.fillText(p + '%', padL - 4, y + 3);
+  }
+
+  // Compute all utilization values
+  const allUtils = [];
+  for (let t = 0; t <= totalCycles - 1; t++) {
+    const a = countActive(t);
+    allUtils.push(a / (K * N) * 100);
+  }
+
+  // Draw full curve (dimmed)
+  chartCtx.strokeStyle = '#30363d';
+  chartCtx.lineWidth = 1.5;
+  chartCtx.beginPath();
+  for (let t = 0; t < allUtils.length; t++) {
+    const x = padL + (t / (totalCycles - 1)) * plotW;
+    const y = padT + plotH * (1 - allUtils[t] / 100);
+    if (t === 0) chartCtx.moveTo(x, y);
+    else chartCtx.lineTo(x, y);
+  }
+  chartCtx.stroke();
+
+  // Draw progress curve (bright)
+  chartCtx.strokeStyle = '#3fb950';
+  chartCtx.lineWidth = 2;
+  chartCtx.beginPath();
+  for (let t = 0; t <= Math.min(T, totalCycles - 1); t++) {
+    const x = padL + (t / (totalCycles - 1)) * plotW;
+    const y = padT + plotH * (1 - allUtils[t] / 100);
+    if (t === 0) chartCtx.moveTo(x, y);
+    else chartCtx.lineTo(x, y);
+  }
+  chartCtx.stroke();
+
+  // Current position dot
+  if (T <= totalCycles - 1) {
+    const x = padL + (T / (totalCycles - 1)) * plotW;
+    const y = padT + plotH * (1 - allUtils[T] / 100);
+    chartCtx.beginPath();
+    chartCtx.arc(x, y, 4, 0, Math.PI * 2);
+    chartCtx.fillStyle = '#3fb950';
+    chartCtx.fill();
+  }
+
+  // Phase regions
+  const fillEnd = K + N - 2;
+  const drainStart = M;
+  chartCtx.globalAlpha = 0.08;
+  // Fill region
+  chartCtx.fillStyle = '#f0883e';
+  const fillX = padL;
+  const fillW = (Math.min(fillEnd, totalCycles - 1) / (totalCycles - 1)) * plotW;
+  chartCtx.fillRect(fillX, padT, fillW, plotH);
+  // Drain region
+  chartCtx.fillStyle = '#f85149';
+  const drainX = padL + (Math.max(drainStart, 0) / (totalCycles - 1)) * plotW;
+  const drainW = plotW - (drainX - padL);
+  chartCtx.fillRect(drainX, padT, drainW, plotH);
+  chartCtx.globalAlpha = 1;
+
+  // Labels
+  chartCtx.fillStyle = '#8b949e';
+  chartCtx.font = '9px monospace';
+  chartCtx.textAlign = 'center';
+  chartCtx.fillText('T', padL + plotW / 2, ch - 2);
+}
+
+// ─── Hover handling ───
+mainCanvas.addEventListener('mousemove', (e) => {
+  const rect = mainCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const layout = getLayout();
+  const { cellSize, labelMarginLeft: mx, labelMarginTop: my } = layout;
+
+  const j = Math.floor((x - mx) / cellSize);
+  const k = Math.floor((y - my) / cellSize);
+
+  if (k >= 0 && k < K && j >= 0 && j < N) {
+    const state = getPEState(k, j, T);
+    const detail = document.getElementById('peDetail');
+
+    let html = `<span style="color:#58a6ff;font-weight:bold">PE(${k}, ${j})</span> — stores <span style="color:#f0883e">B[${k},${j}]</span><br>`;
+
+    if (state.active) {
+      html += `Status: <span style="color:#3fb950">Active</span><br>`;
+      html += `Processing row i = ${state.i}<br>`;
+      html += `Current: ${state.multiply}<br>`;
+      html += `Partial sum (${state.termsAccumulated}/${K} terms):<br>`;
+      html += `<span style="color:#c9d1d9;font-size:11px">${state.psumDesc}</span><br>`;
+      if (state.isOutput) {
+        html += `<span style="color:#f0883e;font-weight:bold">→ Output: ${state.cElem} complete!</span>`;
+      } else {
+        html += `→ Contributing to C[${state.i},${j}]`;
+      }
+    } else {
+      html += `Status: <span style="color:#8b949e">Idle</span><br>`;
+      const nextI = T - k - j + 1;
+      if (nextI >= 0 && nextI < M) {
+        // Already processed
+        html += `Waiting for next data`;
+      } else if (T < k + j) {
+        html += `Data arrives at T = ${k + j} (in ${k + j - T} cycles)`;
+      } else {
+        html += `All rows processed`;
+      }
+    }
+    detail.innerHTML = html;
+  }
+});
+
+// ─── Controls ───
+function applyPreset() {
+  const v = document.getElementById('preset').value;
+  if (v === '4') { setDims(4, 4, 4); }
+  else if (v === '6') { setDims(6, 4, 6); }
+  else if (v === '8') { setDims(8, 8, 8); }
+}
+
+function setDims(m, k, n) {
+  document.getElementById('inputM').value = m;
+  document.getElementById('inputK').value = k;
+  document.getElementById('inputN').value = n;
+  resetSim();
+}
+
+function resetSim() {
+  stopPlay();
+  M = Math.max(1, Math.min(16, parseInt(document.getElementById('inputM').value) || 4));
+  K = Math.max(1, Math.min(16, parseInt(document.getElementById('inputK').value) || 4));
+  N = Math.max(1, Math.min(16, parseInt(document.getElementById('inputN').value) || 4));
+  T = 0;
+  totalCycles = M + K + N - 2;
+  utilizationHistory = [];
+  completedResults = [];
+  recordStep();
+  draw();
+}
+
+function recordStep() {
+  const active = countActive(T);
+  const util = (active / (K * N)) * 100;
+  if (utilizationHistory.length <= T) {
+    utilizationHistory.push(util);
+  }
+  // Record completed results
+  const completed = getCompletedAt(T);
+  completed.forEach(c => {
+    if (!completedResults.includes(c)) completedResults.push(c);
+  });
+}
+
+function stepForward() {
+  if (T < totalCycles - 1) {
+    T++;
+    recordStep();
+    draw();
+  }
+}
+
+function stepBack() {
+  if (T > 0) {
+    T--;
+    // Recalculate completed results up to T
+    completedResults = [];
+    for (let t = 0; t <= T; t++) {
+      getCompletedAt(t).forEach(c => {
+        if (!completedResults.includes(c)) completedResults.push(c);
+      });
+    }
+    draw();
+  }
+}
+
+function togglePlay() {
+  if (playing) {
+    stopPlay();
+  } else {
+    playing = true;
+    document.getElementById('btnPlay').innerHTML = '&#9646;&#9646; Pause';
+    tick();
+  }
+}
+
+function stopPlay() {
+  playing = false;
+  document.getElementById('btnPlay').innerHTML = '&#9654; Play';
+  if (animTimer) {
+    clearTimeout(animTimer);
+    animTimer = null;
+  }
+}
+
+function tick() {
+  if (!playing) return;
+  if (T < totalCycles - 1) {
+    stepForward();
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    const delay = Math.max(50, 1200 - speed * 110);
+    animTimer = setTimeout(tick, delay);
+  } else {
+    stopPlay();
+  }
+}
+
+// ─── Init ───
+window.addEventListener('resize', draw);
+resetSim();
+</script>
+
+</body>
+</html>
