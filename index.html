@@ -117,27 +117,14 @@
     width: 100%;
     border-radius: 4px;
   }
-  .time-display {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    font-size: 16px;
-    font-weight: bold;
-    color: #58a6ff;
-    background: rgba(13,17,23,0.85);
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid #30363d;
-  }
   .phase-display {
-    position: absolute;
-    top: 20px;
-    left: 20px;
+    display: inline-block;
     font-size: 13px;
     padding: 6px 12px;
     border-radius: 6px;
     border: 1px solid #30363d;
-    background: rgba(13,17,23,0.85);
+    background: #161b22;
+    margin-bottom: 8px;
   }
   .phase-fill { color: #f0883e; }
   .phase-steady { color: #3fb950; }
@@ -303,11 +290,15 @@
       <input type="range" class="speed-slider" id="speedSlider" min="1" max="10" value="4">
     </div>
 
+    <!-- Phase indicator (outside canvas to avoid overlap) -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div class="phase-display" id="phaseDisplay"></div>
+      <div style="font-size:14px;color:#58a6ff;font-weight:bold;" id="timeDisplayTop">T = 0</div>
+    </div>
+
     <!-- Canvas -->
     <div class="canvas-wrapper">
       <canvas id="mainCanvas"></canvas>
-      <div class="time-display" id="timeDisplay">T = 0</div>
-      <div class="phase-display" id="phaseDisplay"></div>
     </div>
 
     <div class="formula">
@@ -450,8 +441,8 @@ function resizeCanvas() {
   const wrapper = mainCanvas.parentElement;
   const w = wrapper.clientWidth - 32;
   // Calculate cell size to fit
-  const labelMarginLeft = 60;
-  const labelMarginTop = 40;
+  const labelMarginLeft = 120;
+  const labelMarginTop = 30;
   const labelMarginBottom = 30;
   const maxCellW = Math.floor((w - labelMarginLeft) / N);
   const maxCellH = Math.floor(500 / K);
@@ -497,28 +488,21 @@ function draw() {
     ctx.fillText(`j=${j}`, mx + j * cellSize + cellSize / 2, my - 8);
   }
 
-  // Row labels (k)
-  ctx.textAlign = 'right';
+  // Row labels (k) and A input arrows (left side)
   for (let k = 0; k < K; k++) {
-    ctx.fillText(`k=${k}`, mx - 8, my + k * cellSize + cellSize / 2 + 4);
-  }
-
-  // A input arrows (left side)
-  ctx.textAlign = 'right';
-  ctx.font = '10px monospace';
-  for (let k = 0; k < K; k++) {
-    const i = T - k;  // element entering row k at column 0
+    const cy = my + k * cellSize + cellSize / 2;
+    // k label (closer to grid)
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`k=${k}`, mx - 6, cy + 4);
+    // A[i,k] label (further left)
+    const i = T - k;
     if (i >= 0 && i < M) {
       ctx.fillStyle = '#3fb950';
-      const y = my + k * cellSize + cellSize / 2;
-      ctx.fillText(`A[${i},${k}]→`, mx - 12, y + 4);
-      // Draw arrow
-      ctx.strokeStyle = '#3fb95080';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(mx - 10, y);
-      ctx.lineTo(mx - 2, y);
-      ctx.stroke();
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`A[${i},${k}]→`, mx - 30, cy + 4);
     }
   }
 
@@ -644,7 +628,7 @@ function updateUI() {
   const totalCompleted = completedResults.length;
   const totalResults = M * N;
 
-  document.getElementById('timeDisplay').textContent = `T = ${T}`;
+  document.getElementById('timeDisplayTop').textContent = `T = ${T}`;
   document.getElementById('statT').textContent = T;
   document.getElementById('statTotal').textContent = totalCycles;
   document.getElementById('statActive').textContent = `${active} / ${totalPE}`;
